@@ -1,0 +1,8 @@
+{
+  "name": "ASCEN NOXUS 2",
+  "description": "Um aplicativo dark e imponente para disciplina digital, controle de impulsos e progresso pessoal.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
