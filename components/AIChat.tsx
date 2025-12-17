@@ -65,7 +65,7 @@ const AIChat: React.FC<AIChatProps> = ({ userState }) => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "tngtech/deepseek-r1t2-chimera:free",
+          "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
           "messages": [
             { "role": "system", "content": systemPrompt },
             ...messages.map(m => ({ role: m.role, content: m.content })),
@@ -114,8 +114,8 @@ const AIChat: React.FC<AIChatProps> = ({ userState }) => {
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-2xl p-4 ${msg.role === 'user'
-                ? 'bg-primary text-white rounded-br-none'
-                : 'bg-surface border border-white/5 text-gray-200 rounded-bl-none'
+              ? 'bg-primary text-white rounded-br-none'
+              : 'bg-surface border border-white/5 text-gray-200 rounded-bl-none'
               }`}>
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
             </div>
