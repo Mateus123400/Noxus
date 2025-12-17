@@ -65,7 +65,7 @@ const AIChat: React.FC<AIChatProps> = ({ userState }) => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "deepseek/deepseek-r1:free",
+          "model": "tngtech/deepseek-r1t2-chimera:free",
           "messages": [
             { "role": "system", "content": systemPrompt },
             ...messages.map(m => ({ role: m.role, content: m.content })),
