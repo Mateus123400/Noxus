@@ -5,6 +5,7 @@ export enum AppView {
   BLOCKER = 'BLOCKER',
   PROGRESSION = 'PROGRESSION',
   PROFILE = 'PROFILE',
+  AUTH = 'AUTH',
 }
 
 export enum LevelKey {

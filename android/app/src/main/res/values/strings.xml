@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ascen Noxus</string>
+    <string name="title_activity_main">Ascen Noxus</string>
+    <string name="package_name">com.ascennoxus.app</string>
+    <string name="custom_url_scheme">com.ascennoxus.app</string>
+</resources>
