@@ -4,7 +4,7 @@ import { UserState, LevelKey } from '../types';
 import { LEVEL_DEFINITIONS } from '../constants';
 
 // @ts-ignore
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 
 interface Message {
   role: 'user' | 'assistant';
