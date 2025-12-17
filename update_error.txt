@@ -1,0 +1,5 @@
+√ Updating Android plugins in 3.18ms
+[info] Found 1 Capacitor plugin for android:
+       @capacitor/app@8.0.0
+× update android - failed!
+[error] Error: EPERM: operation not permitted, rmdir 'C:\Users\alexa\OneDrive\Documentos\Noxus\Noxus\android\capacitor-cordova-android-plugins\build\outputs\logs'

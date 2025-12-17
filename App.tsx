@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { supabase } from './supabaseClient';
 import { AppView, UserState, LevelKey } from './types';
 import { LEVEL_DEFINITIONS, getLevelColor } from './constants';
@@ -6,9 +7,10 @@ import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
 import Navigation from './components/Navigation';
 import Timer from './components/Timer';
-import Blocker from './components/Blocker';
+import AIChat from './components/AIChat';
 import Progression from './components/Progression';
 import Auth from './components/Auth';
+import Profile from './components/Profile';
 import { User, Settings, Shield } from 'lucide-react';
 
 const INITIAL_STATE: UserState = {
@@ -24,8 +26,11 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.AUTH);
   const [loading, setLoading] = useState(true);
 
+  // Track recovery mode reliably across async states
+  const isRecoveryMode = React.useRef(false);
+
   // Initialize Supabase Auth and Data
-  const initSupabase = async () => {
+  const initSupabase = async (forceRedirect = true) => {
     try {
       // 1. Check active session
       const { data: { session } } = await supabase.auth.getSession();
@@ -54,9 +59,14 @@ const App: React.FC = () => {
             streakDays: diffDays,
             currentLevel: profile.current_level as LevelKey,
             startDate: profile.start_date,
+            email: session.user.email,
+            avatarUrl: profile.avatar_url,
           });
-          // Go to dashboard if logged in
-          setCurrentView(AppView.DASHBOARD);
+
+          // Only redirect if explicitly requested AND not in recovery mode
+          if (forceRedirect && !isRecoveryMode.current) {
+            setCurrentView(AppView.DASHBOARD);
+          }
         } else {
           // Create profile if missing (rare case for new auth users)
           const { error: insertError } = await supabase
@@ -69,7 +79,16 @@ const App: React.FC = () => {
               has_onboarded: true, // Auto-onboard for now
             }]);
           if (insertError) console.error('Error creating profile:', insertError);
-          setCurrentView(AppView.DASHBOARD);
+
+          // Update local state immediately for new user
+          setUserState(prev => ({
+            ...prev,
+            email: session.user.email,
+          }));
+
+          if (forceRedirect && !isRecoveryMode.current) {
+            setCurrentView(AppView.DASHBOARD);
+          }
         }
       } else {
         // Stay on AUTH view if no session
@@ -83,20 +102,79 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    initSupabase();
+    // Initial load - yes, redirect to dashboard if logged in
+    initSupabase(true);
 
     // Listen for auth changes (Login, Logout)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        initSupabase(); // Refetch data on sign in
+      console.log('Auth Event:', event);
+
+      if (event === 'PASSWORD_RECOVERY') {
+        isRecoveryMode.current = true;
+        setCurrentView(AppView.UPDATE_PASSWORD);
+      } else if (event === 'SIGNED_IN' && session) {
+        // If we are currently in update password mode (checked via Ref), DO NOT redirect.
+        if (!isRecoveryMode.current) {
+          // Pass false to avoid overriding current view if just refreshing session
+          initSupabase(false);
+        } else {
+          // We are in recovery mode, but we still need the data!
+          // Fetch data but forceRedirect = false
+          initSupabase(false);
+        }
       } else if (event === 'SIGNED_OUT') {
+        isRecoveryMode.current = false;
         setCurrentView(AppView.AUTH);
         setUserState(INITIAL_STATE);
       }
     });
 
+    // LISTEN FOR DEEP LINKS (OAuth Callback & Password Reset)
+    const appListener = CapacitorApp.addListener('appUrlOpen', async (data) => {
+      console.log('App opened with URL:', data.url);
+
+      // Handle Password Reset Callback PRIORITY
+      if (data.url.includes('reset-callback') || data.url.includes('type=recovery')) {
+        isRecoveryMode.current = true;
+        setCurrentView(AppView.UPDATE_PASSWORD);
+        // We allow the token parsing below to happen so session gets set
+      }
+
+      if (data.url.includes('access_token') || data.url.includes('refresh_token')) {
+        try {
+          const url = new URL(data.url);
+          const hash = url.hash.substring(1);
+          const params = new URLSearchParams(hash);
+
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (error) console.error('Set session error:', error);
+
+            // RE-ENFORCE recovery view if needed after session set
+            if (data.url.includes('reset-callback') || data.url.includes('type=recovery')) {
+              isRecoveryMode.current = true;
+              setCurrentView(AppView.UPDATE_PASSWORD);
+            } else if (data.url.includes('google-auth')) {
+              // For Google Auth, explicitly Go to Dashboard
+              isRecoveryMode.current = false; // Ensure we are NOT in recovery
+              setCurrentView(AppView.DASHBOARD);
+            }
+          }
+        } catch (e) {
+          console.error('Error handling deep link:', e);
+        }
+      }
+    });
+
     return () => {
       authListener.subscription.unsubscribe();
+      appListener.then(handler => handler.remove());
     };
   }, []);
 
@@ -127,6 +205,9 @@ const App: React.FC = () => {
   // Sync state changes to Supabase
   useEffect(() => {
     const syncToSupabase = async () => {
+      // Don't sync if we are just updating password (might not have profile loaded yet)
+      if (currentView === AppView.UPDATE_PASSWORD) return;
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await supabase.from('profiles').upsert({
@@ -140,11 +221,11 @@ const App: React.FC = () => {
       }
     };
 
-    // Only sync if not loading (to avoid overwriting with initial state before load)
+    // Only sync if not loading 
     if (!loading) {
       syncToSupabase();
     }
-  }, [userState, loading]);
+  }, [userState, loading]); // REMOVED currentView to fix navigation loop bug
 
   const handleOnboardingComplete = () => {
     setUserState(prev => ({ ...prev, hasOnboarded: true }));
@@ -157,8 +238,11 @@ const App: React.FC = () => {
   const renderContent = () => {
     if (loading) {
       return (
-        <div className="flex items-center justify-center h-full text-white">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+        <div className="flex items-center justify-center h-full text-white" style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#05070C' }}>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-4 mx-auto" style={{ borderBottom: '2px solid white', width: '32px', height: '32px', borderRadius: '50%' }}></div>
+            <p style={{ color: 'white' }}>Iniciando Noxus...</p>
+          </div>
         </div>
       );
     }
@@ -173,47 +257,12 @@ const App: React.FC = () => {
         />;
       case AppView.FOCUS: // New Focus Tab View
         return <Timer />;
-      case AppView.BLOCKER:
-        return <Blocker />;
+      case AppView.MENTOR:
+        return <AIChat userState={userState} />;
       case AppView.PROGRESSION:
         return <Progression userState={userState} setUserState={setUserState} />;
       case AppView.PROFILE:
-        return (
-          <div className="p-6 pt-12 animate-fade-in text-center pb-24 h-full overflow-y-auto no-scrollbar">
-            <div className="w-24 h-24 mx-auto rounded-full bg-surface border-2 border-white/10 flex items-center justify-center mb-4 shadow-xl">
-              <User size={40} className="text-gray-400" />
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Usuário Determinado</h2>
-            <p className="text-gray-500 mb-8">Nível atual: {LEVEL_DEFINITIONS.find(l => l.key === userState.currentLevel)?.name}</p>
-
-            <div className="space-y-4 text-left max-w-md mx-auto">
-              <div className="p-4 bg-surface rounded-xl flex items-center gap-4 border border-white/5 active:bg-surface/80 transition-colors">
-                <Settings size={20} className="text-gray-400" />
-                <div>
-                  <p className="text-white font-bold text-sm">Configurações</p>
-                  <p className="text-xs text-gray-500">Notificações, Privacidade</p>
-                </div>
-              </div>
-              <div className="p-4 bg-surface rounded-xl flex items-center gap-4 border border-white/5 active:bg-surface/80 transition-colors">
-                <Shield size={20} className="text-gray-400" />
-                <div>
-                  <p className="text-white font-bold text-sm">Segurança</p>
-                  <p className="text-xs text-gray-500">PIN, Biometria</p>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                // window.location.reload(); // Handled by onAuthStateChange
-              }}
-              className="mt-12 text-xs text-red-500 underline opacity-50 hover:opacity-100"
-            >
-              Sign Out / Reset
-            </button>
-          </div>
-        );
+        return <Profile userState={userState} setUserState={setUserState} />;
       default:
         return <Dashboard
           userState={userState}

@@ -1,11 +1,12 @@
 export enum AppView {
+  AUTH = 'AUTH',
   ONBOARDING = 'ONBOARDING',
   DASHBOARD = 'DASHBOARD',
   FOCUS = 'FOCUS', // New view for Timer/Meditation
-  BLOCKER = 'BLOCKER',
+  MENTOR = 'MENTOR',
   PROGRESSION = 'PROGRESSION',
   PROFILE = 'PROFILE',
-  AUTH = 'AUTH',
+  UPDATE_PASSWORD = 'UPDATE_PASSWORD',
 }
 
 export enum LevelKey {
@@ -30,11 +31,13 @@ export interface UserState {
   streakDays: number;
   currentLevel: LevelKey;
   startDate: string; // ISO String
+  email?: string;
+  avatarUrl?: string;
 }
 
 export interface BlockItem {
   id: string;
   name: string;
   type: 'APP' | 'SITE';
-  isActive: boolean;
+  is_active: boolean;
 }
