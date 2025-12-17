@@ -65,7 +65,7 @@ const AIChat: React.FC<AIChatProps> = ({ userState }) => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
+          "model": "deepseek/deepseek-r1:free",
           "messages": [
             { "role": "system", "content": systemPrompt },
             ...messages.map(m => ({ role: m.role, content: m.content })),
