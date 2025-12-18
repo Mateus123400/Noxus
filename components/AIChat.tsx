@@ -2,9 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User as UserIcon, Loader2 } from 'lucide-react';
 import { UserState, LevelKey } from '../types';
 import { LEVEL_DEFINITIONS } from '../constants';
+import { OpenRouter } from "@openrouter/sdk";
 
 // @ts-ignore
 const OPENROUTER_API_KEY = "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";
+
+const client = new OpenRouter({
+  apiKey: OPENROUTER_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": "https://ascennoxus.app",
+    "X-Title": "Ascen Noxus",
+  }
+});
 
 interface Message {
   role: 'user' | 'assistant';
@@ -54,41 +63,23 @@ const AIChat: React.FC<AIChatProps> = ({ userState }) => {
       
       Responda sempre em Português do Brasil.`;
 
-      console.log("Sending request to OpenRouter...");
+      console.log("Sending request via OpenRouter SDK...");
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": "https://ascennoxus.app",
-          "X-Title": "Ascen Noxus",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          "model": "tngtech/deepseek-r1t2-chimera:free",
-          "messages": [
-            { "role": "system", "content": systemPrompt },
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-            { "role": "user", "content": input }
-          ],
-          "stream": false
-        })
+      const completion = await client.chat.send({
+        model: "tngtech/deepseek-r1t2-chimera:free",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages.map(m => ({ role: m.role, content: m.content })),
+          { role: "user", content: userMessage.content }
+        ]
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro API: ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      const aiContent = data.choices?.[0]?.message?.content || "O silêncio é uma resposta. Tente novamente.";
-
+      const aiContent = completion.choices?.[0]?.message?.content || "O silêncio é uma resposta. Tente novamente.";
       setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
 
     } catch (error: any) {
       console.error("AI Error:", error);
-      // Show ACTUAL error to user for debugging
-      setMessages(prev => [...prev, { role: 'assistant', content: `[ERRO DE CONEXÃO] Detalhes: ${error.message || JSON.stringify(error)}` }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `[ERRO] ${error.message || JSON.stringify(error)}` }]);
     } finally {
       setIsLoading(false);
     }
